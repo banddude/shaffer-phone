@@ -44,7 +44,7 @@ final class SMSListViewModel: ObservableObject {
             isLoading = true
         }
 
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: AppConfig.authorizedRequest(url: url)) { [weak self] data, _, error in
             DispatchQueue.main.async {
                 guard let self else {
                     return
@@ -110,7 +110,7 @@ final class SMSListViewModel: ObservableObject {
             return
         }
 
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        URLSession.shared.dataTask(with: AppConfig.authorizedRequest(url: url)) { [weak self] data, _, _ in
             guard let self, let data else {
                 return
             }

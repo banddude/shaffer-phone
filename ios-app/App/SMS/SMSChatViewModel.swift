@@ -41,7 +41,7 @@ final class SMSChatViewModel: ObservableObject {
             isLoading = true
         }
 
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: AppConfig.authorizedRequest(url: url)) { [weak self] data, _, error in
             DispatchQueue.main.async {
                 guard let self else {
                     return
@@ -87,7 +87,7 @@ final class SMSChatViewModel: ObservableObject {
         messageText = ""
         attachments = []
 
-        Task.detached { [weak self] in
+        Task { [weak self] in
             guard let self else {
                 return
             }
@@ -212,7 +212,7 @@ final class SMSChatViewModel: ObservableObject {
                 continue
             }
 
-            Task.detached { [weak self] in
+            Task { [weak self] in
                 guard let self else {
                     return
                 }

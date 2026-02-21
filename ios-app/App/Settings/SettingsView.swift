@@ -291,8 +291,7 @@ struct SettingsView: View {
             return SetupTestResult(success: false, summary: "Setup test failed", details: "Invalid API Base URL or token.")
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        var request = AppConfig.authorizedRequest(url: url)
         request.timeoutInterval = 12
 
         do {
@@ -314,8 +313,7 @@ struct SettingsView: View {
             return SetupTestResult(success: false, summary: "Setup test failed", details: "Invalid Voice Token URL, check worker URL, token, and identity.")
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        var request = AppConfig.authorizedRequest(url: url)
         request.timeoutInterval = 12
 
         do {

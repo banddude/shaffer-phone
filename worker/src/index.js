@@ -11,9 +11,9 @@ export default {
     } else if (path.startsWith("/media/") && request.method === "GET") {
       return handleGetMedia(request, env);
     } else if (path === "/outbound") {
-      return handleOutbound(request);
+      return handleOutbound(request, env);
     } else if (path === "/inbound") {
-      return handleInbound(request, env);
+      return handleInboundClient(request, env);
     } else if (path === "/inbound-client") {
       return handleInboundClient(request, env);
     } else if (path === "/voice-outbound") {
@@ -62,15 +62,16 @@ const DEFAULT_VOICE_CLIENT_IDENTITY = "office-line";
 const MAX_REGISTERED_DEVICES = 1000;
 const textEncoder = new TextEncoder();
 
-async function handleOutbound(request) {
+async function handleOutbound(request, env) {
   const formData = await request.formData();
   const toRaw = String(formData.get("To") || "").trim();
   const phoneNumber = normalizePhoneNumber(toRaw);
 
+  const callerId = env.TWILIO_CALLER_ID || MY_NUMBER;
   const recordingStatusCallback = recordingStatusCallbackUrl(request.url);
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="+13236423969" record="record-from-answer-dual" recordingTrack="both" recordingStatusCallback="${recordingStatusCallback}" recordingStatusCallbackEvent="in-progress completed absent">
+  <Dial callerId="${callerId}" record="record-from-answer-dual" recordingTrack="both" recordingStatusCallback="${recordingStatusCallback}" recordingStatusCallbackEvent="in-progress completed absent">
     <Number>${phoneNumber}</Number>
   </Dial>
 </Response>`;
@@ -78,10 +79,6 @@ async function handleOutbound(request) {
   return new Response(twiml, {
     headers: { "Content-Type": "text/xml" },
   });
-}
-
-async function handleInbound(request, env) {
-  return handleInboundClient(request, env);
 }
 
 async function handleInboundClient(request, env) {
@@ -447,10 +444,6 @@ function normalizePushEnvironment(raw) {
   return "development";
 }
 
-function normalizeVoiceIdentityValue(raw, env) {
-  return normalizeVoiceIdentity(raw, env);
-}
-
 async function handleRegisterDevice(request, env) {
   const authErr = authCheck(request, env);
   if (authErr) return authErr;
@@ -478,7 +471,7 @@ async function handleRegisterDevice(request, env) {
     token,
     bundleId,
     environment: normalizePushEnvironment(payload.environment || env.APNS_DEFAULT_ENV),
-    voiceIdentity: normalizeVoiceIdentityValue(payload.voiceIdentity || env.TWILIO_VOICE_CLIENT_IDENTITY, env),
+    voiceIdentity: normalizeVoiceIdentity(payload.voiceIdentity || env.TWILIO_VOICE_CLIENT_IDENTITY, env),
     platform: "ios",
     locale: String(payload.locale || ""),
     appVersion: String(payload.appVersion || ""),
@@ -543,14 +536,8 @@ async function getRegisteredDevices(env) {
     return [];
   }
 
-  const devices = [];
-  for (let i = index.length - 1; i >= 0; i--) {
-    const device = await env.MESSAGES.get(`device:${index[i]}`, "json");
-    if (device && device.token && device.bundleId) {
-      devices.push(device);
-    }
-  }
-  return devices;
+  const results = await Promise.all(index.map(id => env.MESSAGES.get(`device:${id}`, "json")));
+  return results.filter(device => device && device.token && device.bundleId).reverse();
 }
 
 function extractVoiceIdentityFromPayload(payload, env) {
@@ -843,7 +830,7 @@ async function handleSendSms(request, env) {
   }
 
   const twilioParams = new URLSearchParams();
-  twilioParams.set("From", MY_NUMBER);
+  twilioParams.set("From", env.TWILIO_CALLER_ID || MY_NUMBER);
   twilioParams.set("To", to);
   twilioParams.set("Body", normalizedBody || " ");
 
@@ -884,7 +871,7 @@ async function handleSendSms(request, env) {
   const msg = {
     id: result.sid || crypto.randomUUID(),
     direction: "outbound",
-    from: MY_NUMBER,
+    from: env.TWILIO_CALLER_ID || MY_NUMBER,
     to,
     body,
     media,
@@ -1100,16 +1087,9 @@ async function getVoiceCalls(env, limit = 100) {
     return [];
   }
 
-  const results = [];
-  for (let i = index.length - 1; i >= 0 && results.length < limit; i--) {
-    const callSid = index[i];
-    const call = await env.MESSAGES.get(`voice_call:${callSid}`, "json");
-    if (!call) {
-      continue;
-    }
-    results.push(call);
-  }
-  return results;
+  const slice = index.slice(-limit).reverse();
+  const results = await Promise.all(slice.map(callSid => env.MESSAGES.get(`voice_call:${callSid}`, "json")));
+  return results.filter(Boolean);
 }
 
 async function storeRecordingEvent(env, event) {
@@ -1160,19 +1140,13 @@ async function getRecordings(env, limit = 100, callSid = "") {
     return [];
   }
 
-  const results = [];
-  for (let i = index.length - 1; i >= 0 && results.length < limit; i--) {
-    const recordingSid = index[i];
-    const recording = await env.MESSAGES.get(`recording:${recordingSid}`, "json");
-    if (!recording) {
-      continue;
-    }
-    if (callSid && recording.callSid !== callSid) {
-      continue;
-    }
-    results.push(recording);
+  const slice = index.slice(-limit).reverse();
+  const results = await Promise.all(slice.map(recordingSid => env.MESSAGES.get(`recording:${recordingSid}`, "json")));
+  const filtered = results.filter(Boolean);
+  if (callSid) {
+    return filtered.filter(recording => recording.callSid === callSid);
   }
-  return results;
+  return filtered;
 }
 
 async function storeMessage(env, otherNumber, msg) {
@@ -1209,21 +1183,22 @@ async function getAllConversations(env) {
   const indexKey = "index:conversations";
   const index = (await env.MESSAGES.get(indexKey, "json")) || [];
 
-  const conversations = [];
-  for (const number of index) {
+  const results = await Promise.all(index.map(async (number) => {
     const messages = await getMessages(env, number);
     if (messages.length > 0) {
       const last = messages[messages.length - 1];
-      conversations.push({
+      return {
         number,
         lastMessage: last.body,
         lastTimestamp: last.timestamp,
         messageCount: messages.length,
         hasMedia: messages.some(m => m.media && m.media.length > 0),
-      });
+      };
     }
-  }
+    return null;
+  }));
 
+  const conversations = results.filter(Boolean);
   conversations.sort((a, b) => b.lastTimestamp.localeCompare(a.lastTimestamp));
   return conversations;
 }
@@ -1544,7 +1519,7 @@ function messagesHTML(token) {
 </div>
 <div class="chat-area" id="chatArea">
   <div class="empty-state" id="emptyState">Select a conversation or start a new one</div>
-  <div id="chatView" style="display:none; flex:1; display:none; flex-direction:column; height:100%;">
+  <div id="chatView" style="display:none; flex-direction:column; height:100%;">
     <div class="chat-header">
       <button class="back-btn" onclick="showSidebar()">&#8592; Back</button>
       <h3 id="chatTitle"></h3>
@@ -1633,7 +1608,7 @@ function renderMedia(med) {
 async function sendMsg() {
   const body = document.getElementById("msgBody").value.trim();
   const mediaUrl = document.getElementById("mediaUrl").value.trim();
-  if (!body || !currentNumber) return;
+  if ((!body && !mediaUrl) || !currentNumber) return;
   const btn = document.getElementById("sendBtn");
   btn.disabled = true;
   try {
