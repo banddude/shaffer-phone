@@ -1,0 +1,11 @@
+name = "shaffer-phone-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "MESSAGES"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+APNS_DEFAULT_ENV = "development"
+APNS_BUNDLE_ID = "com.example.shafferphone"

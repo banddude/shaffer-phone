@@ -1,0 +1,33 @@
+name: TwilioOfficePhone
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: '16.0'
+packages:
+  TwilioVoice:
+    url: https://github.com/twilio/twilio-voice-ios
+    from: 6.13.6
+targets:
+  TwilioOfficePhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.shafferphone
+        INFOPLIST_FILE: Resources/Info.plist
+        DEVELOPMENT_TEAM: YOUR_TEAM_ID
+        SWIFT_VERSION: 5.0
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Resources/TwilioOfficePhone.entitlements
+        TARGETED_DEVICE_FAMILY: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_HARDENED_RUNTIME: NO
+        SUPPORTS_MACCATALYST: NO
+        OTHER_LDFLAGS: $(inherited)
+    dependencies:
+      - package: TwilioVoice
+        product: TwilioVoice
