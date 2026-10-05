@@ -1,5 +1,7 @@
 # Shaffer Phone
 
+> **Retired prototype / reference only.** Shaffer business calling, SMS/MMS, voicemail, CallKit, Twilio, recording, and transcription now live in OfficeAdmin. Active replacement work is tracked in `banddude/officeadmin-books` (including phone epic #1094). Do not start new product work in this repository.
+
 Twilio powered iOS business phone app and Cloudflare Worker backend.
 
 ## Repo layout
